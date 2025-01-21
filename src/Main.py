@@ -5,7 +5,9 @@ from agents.social_media import SocialMediaAgent
 from agents.web_scraper import WebScraperAgent
 import argparse
 import json
+import streamlit as st
 from datetime import datetime
+from ui import user_interface
 
 class ResearchOrchestrator:
     """Main orchestrator for the AI Research Agent system."""
@@ -124,6 +126,8 @@ def main():
         days_back=args.days_back,
         max_items=args.max_items
     )
+    st.set_page_config(page_title="AI Research Agent")
+    ui.main() 
     
 if __name__ == "__main__":
     main()
