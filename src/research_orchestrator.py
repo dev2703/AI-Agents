@@ -1,113 +1,151 @@
-from src.agents.social_media_agent import SocialMediaAgent
-from src.agents.web_scraper_agent import WebScraperAgent
-from src.analysis.data_processor import DataProcessor
-from src.analysis.customer_analysis import CustomerAnalyzer
-from src.analysis.data_visualization import DataVisualizer
-from src.utils.logger import logger
-from config.settings import Settings
-import argparse
+from typing import List, Dict, Any
+from pathlib import Path
 import json
 from datetime import datetime
+from src.agents.social_media import SocialMediaAgent
+from src.agents.web_scraper import WebScraperAgent
+from src.analysis.sentiment import SentimentAnalyzer
+from src.visualization.dashboards import ResearchDashboard
+from src.utils.logger import setup_logger
 
 class ResearchOrchestrator:
-    def __init__(self, config_path=None):
+    """Main controller for research operations"""
+    
+    def __init__(self, config: Dict[str, Any]):
+        self.config = config
+        self.logger = setup_logger("ResearchOrchestrator")
+        
+        # Initialize agents
+        self.social_agent = SocialMediaAgent(config.get('social_media', {}))
+        self.web_agent = WebScraperAgent(config.get('web_scraper', {}))
+        
+        # Initialize analysis and visualization components
+        self.analyzer = SentimentAnalyzer()
+        self.dashboard = ResearchDashboard()
+        
+    def run_pipeline(
+        self,
+        keywords: List[str],
+        websites: List[str] = None,
+        days_back: int = 7,
+        max_items: int = 100
+    ) -> Dict[str, Any]:
         """
-        Initialize the orchestrator.
-
-        Args:
-            config_path (str): Optional path to the config file.
+        Execute complete research pipeline:
+        1. Data Collection
+        2. Data Processing
+        3. Advanced Analysis
+        4. Visualization
+        5. Save Results
         """
-        self.settings = Settings(config_path)
-        self.logger = logger
-        self.social_media_agent = SocialMediaAgent(self.settings.get('social_media'))
-        self.web_scraper_agent = WebScraperAgent(self.settings.get('web_scraper'))
-        self.data_processor = DataProcessor()
-        self.customer_analyzer = CustomerAnalyzer()
-        self.data_visualizer = DataVisualizer()
-
-    def run_research(self, 
-                     keywords: List[str], 
-                     websites: List[str] = None, 
-                     days_back: int = 7, 
-                     max_items: int = 100) -> Dict[str, Any]:
-        """
-        Run a complete research operation.
-
-        Args:
-            keywords: List of keywords to research.
-            websites: Optional list of websites to scrape.
-            days_back: Number of days of historical data to collect.
-            max_items: Maximum items to collect per source.
-
-        Returns:
-            Dictionary containing all collected and processed data.
-        """
-        self.logger.info(f"Starting research for keywords: {keywords}")
-        results = {
-            "metadata": {
-                "keywords": keywords,
-                "websites": websites,
-                "days_back": days_back,
-                "max_items": max_items,
-                "timestamp": datetime.now().isoformat()
-            },
-            "data": {}
-        }
-
-        try:
-            social_media_data = self.social_media_agent.collect(
-                keywords=keywords,
-                days_back=days_back,
+        self.logger.info("Starting research pipeline...")
+        
+        # Data Collection
+        self.logger.info("Collecting social media data...")
+        social_data = self.social_agent.collect(
+            keywords=keywords,
+            days_back=days_back,
+            max_items=max_items
+        )
+        
+        web_data = {}
+        if websites:
+            self.logger.info("Collecting web data...")
+            web_data = self.web_agent.collect(
+                urls=websites,
                 max_items=max_items
             )
-            results["data"]["social_media"] = social_media_data
-
-            # Sentiment Analysis
-            for platform, platform_data in social_media_data.items():
-                for item in platform_data:
-                    text = item.get("text", "")  # Get the relevant text field
-                    sentiment_scores = self.customer_analyzer.analyze_sentiment(text)
-                    item["sentiment"] = sentiment_scores
-
-            # Topic Modeling (Example - implement based on your needs)
-            # if platform_data:
-            #     all_texts = [item.get("text", "") for item in platform_data]
-            #     topics = self.customer_analyzer.perform_topic_modeling(all_texts, num_topics=5)
-            #     results["data"]["social_media"]["topics"] = topics
-
-        except Exception as e:
-            self.logger.error(f"Error collecting social media data: {str(e)}")
-
-        # Collect web data if websites provided
-        if websites:
+        
+        # Data Processing
+        self.logger.info("Processing social media data...")
+        processed_social = self.social_agent.process(social_data)
+        
+        processed_web = {}
+        if web_data:
+            self.logger.info("Processing web data...")
+            processed_web = self.web_agent.process(web_data)
+        
+        # Advanced Analysis
+        self.logger.info("Performing sentiment analysis...")
+        sentiment_report = self.analyzer.generate_report(
+            processed_social.get('data', {})
+        )
+        
+        # Generate Outputs
+        self.logger.info("Saving results...")
+        save_paths = self._save_results(
+            social=processed_social,
+            web=processed_web,
+            sentiment=sentiment_report
+        )
+        
+        # Visualizations
+        self.logger.info("Generating dashboard...")
+        dashboard_url = self.dashboard.create_dashboard(
+            social_data=processed_social,
+            web_data=processed_web,
+            sentiment=sentiment_report
+        )
+        
+        self.logger.info("Research pipeline completed successfully!")
+        
+        return {
+            'status': 'success',
+            'timestamp': datetime.now().isoformat(),
+            'dashboard_url': dashboard_url,
+            'data_locations': save_paths
+        }
+    
+    def _save_results(self, **data_categories) -> Dict[str, str]:
+        """Save processed data to organized directory structure"""
+        timestamp = datetime.now().strftime('%Y%m%d_%H%m%S')
+        output_dir = Path(self.config['storage']['processed_dir']) / timestamp
+        save_paths = {}
+        
+        for category, data in data_categories.items():
+            if not data:
+                continue
+                
+            category_dir = output_dir / category
+            category_dir.mkdir(parents=True, exist_ok=True)
+            
+            output_path = category_dir / f'{category}_data.json'
             try:
-                web_data = self.web_scraper_agent.collect(
-                    urls=websites,
-                    max_pages=max_items
-                )
-                results["data"]["web"] = web_data
+                with open(output_path, 'w') as f:
+                    json.dump(data, f, indent=2)
+                save_paths[category] = str(output_path)
+                self.logger.info(f"Saved {category} data to {output_path}")
             except Exception as e:
-                self.logger.error(f"Error collecting web data: {str(e)}")
-
-        # Save results
-        self._save_results(results)
-
-        # Generate visualizations
-        self.data_visualizer.plot_sentiment_distribution([item["sentiment"]["compound"] 
-                                                         for sublist in social_media_data.values() 
-                                                         for item in sublist])
-        # Add more visualizations as needed (e.g., word clouds, topic distributions)
-
-        return results
-
-    def _save_results(self, results: Dict[str, Any]):
-        """
-        Save research results to file.
-        """
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        filename = f"research_results_{timestamp}.json"
-        output_dir = self.settings.get('storage.processed_dir', 'data/processed')
-        output_path = Path(output_dir) / filename
-        with open(output_path, 'w', encoding='utf-8') as f:
-            json.dump(results, f, ensure_ascii=False, indent=2)
-        self.logger.info(f"Results saved to {output_path}")
+                self.logger.error(f"Failed to save {category} data: {str(e)}")
+                raise
+        
+        return save_paths
+    
+    def _validate_inputs(self, keywords: List[str], websites: List[str]) -> None:
+        """Validate research inputs"""
+        if not keywords:
+            raise ValueError("At least one keyword is required")
+        
+        if websites:
+            for website in websites:
+                if not website.startswith(('http://', 'https://')):
+                    raise ValueError(f"Invalid website URL: {website}")
+    
+    def _generate_report(self, social_data: Dict, web_data: Dict) -> Dict[str, Any]:
+        """Generate a comprehensive research report"""
+        report = {
+            'metadata': {
+                'timestamp': datetime.now().isoformat(),
+                'keywords': social_data.get('metadata', {}).get('keywords', []),
+                'websites': web_data.get('metadata', {}).get('websites', []),
+                'total_items': {
+                    'social_media': social_data.get('metadata', {}).get('total_items', 0),
+                    'web': web_data.get('metadata', {}).get('total_pages', 0)
+                }
+            },
+            'analytics': {
+                'sentiment': self.analyzer.generate_report(social_data.get('data', {})),
+                'engagement': social_data.get('analytics', {}).get('engagement', {})
+            }
+        }
+        return report

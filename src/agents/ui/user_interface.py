@@ -1,34 +1,68 @@
 import streamlit as st
-from src.research_orchestrator import ResearchOrchestrator
+import matplotlib.pyplot as plt
+import seaborn as sns
+from src.orchestration.research_orchestrator import ResearchOrchestrator
+from config import load_config
 
 def main():
-    st.title("AI Research Agent")
+    st.set_page_config(
+        page_title="AI Research Agent",
+        layout="wide",
+        initial_sidebar_state="expanded"
+    )
+    
+    # Load production config
+    config = load_config()
+    
+    st.title("Market Research Agent")
+    
+    with st.sidebar:
+        st.header("Research Parameters")
+        keywords = st.text_input("Keywords (comma-separated):")
+        websites = st.text_input("Websites (comma-separated):")
+        days_back = st.slider("Analysis Period (days):", 1, 30, 7)
+        max_items = st.number_input("Max Items per Source:", 10, 1000, 100)
+    
+    if st.button("Start Research"):
+        with st.spinner("Running research pipeline..."):
+            try:
+                orchestrator = ResearchOrchestrator(config)
+                keywords_list = [k.strip() for k in keywords.split(",") if k.strip()]
+                websites_list = [w.strip() for w in websites.split(",") if w.strip()]
+                
+                results = orchestrator.run_pipeline(
+                    keywords=keywords_list,
+                    websites=websites_list,
+                    days_back=days_back,
+                    max_items=max_items
+                )
+                
+                st.success("Research completed successfully!")
+                st.json(results)
+                
+                # Show visualizations
+                self._display_results(results)
+                
+            except Exception as e:
+                st.error(f"Research failed: {str(e)}")
+                st.stop()
 
-    # Input fields for user interaction
-    keywords = st.text_input("Enter keywords (comma-separated):")
-    keywords = keywords.split(",")
-    websites = st.text_input("Enter websites (comma-separated):").split(",")
-    days_back = st.number_input("Number of days back:", min_value=1, max_value=30, value=7)
-    max_items = st.number_input("Maximum items per source:", min_value=1, value=100)
-
-    if st.button("Run Research"):
-        orchestrator = ResearchOrchestrator()  # Assuming config is handled appropriately
-        results = orchestrator.run_research(keywords=keywords, 
-                                           websites=websites, 
-                                           days_back=days_back, 
-                                           max_items=max_items)
-
-        # Display results (example)
-        st.write("Research Results:")
-        st.json(results) 
-
-        # Display visualizations (example)
-        # Assuming results contain sentiment scores
-        sentiments = [item["sentiment"]["compound"] 
-                      for sublist in results["data"]["social_media"].values() 
-                      for item in sublist]
-        orchestrator.data_visualizer.plot_sentiment_distribution(sentiments)
-        st.pyplot(plt.gcf())  # Display the plot in Streamlit
+def _display_results(results: Dict):
+    """Render interactive visualizations"""
+    tab1, tab2, tab3 = st.tabs(["Sentiment", "Topics", "Engagement"])
+    
+    with tab1:
+        fig = plt.figure(figsize=(10, 6))
+        # Add sentiment visualization
+        st.pyplot(fig)
+    
+    with tab2:
+        # Topic modeling visualization
+        pass
+    
+    with tab3:
+        # Engagement metrics
+        pass
 
 if __name__ == "__main__":
     main()

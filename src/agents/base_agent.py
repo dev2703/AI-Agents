@@ -1,10 +1,12 @@
 from abc import ABC, abstractmethod
 from typing import Dict, List, Any
 from datetime import datetime
-from ..utils.logger import setup_logger
+import json
+from pathlib import Path
+from utils.logger import setup_logger
 
 class BaseAgent(ABC):
-    """Base class for all agents in the system"""
+    """Base class for all data collection agents"""
     
     def __init__(self, name: str):
         self.name = name
@@ -12,42 +14,25 @@ class BaseAgent(ABC):
         self.collected_data = []
         
     @abstractmethod
-    def collect_data(self, *args, **kwargs) -> List[Dict[str, Any]]:
-        """
-        Collect data from the source
-        
-        Returns:
-            List[Dict[str, Any]]: Collected data
-        """
+    def collect(self, *args, **kwargs) -> Dict[str, List[Dict]]:
+        """Collect raw data from sources"""
         pass
     
     @abstractmethod
-    def process_data(self, data: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
-        """
-        Process collected data
-        
-        Args:
-            data: Raw collected data
-            
-        Returns:
-            List[Dict[str, Any]]: Processed data
-        """
+    def process(self, data: Dict[str, List[Dict]]) -> Dict[str, Any]:
+        """Process raw data into structured format"""
         pass
     
-    def save_data(self, data: List[Dict[str, Any]], filename: str = None) -> None:
-        """
-        Save collected data to a file
+    def save_data(self, data: Dict, output_dir: str = "data/raw") -> Path:
+        """Save collected data to timestamped JSON file"""
+        output_path = Path(output_dir) / f"{self.name}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
+        output_path.parent.mkdir(parents=True, exist_ok=True)
         
-        Args:
-            data: Data to save
-            filename: Optional filename, defaults to timestamp
-        """
-        if filename is None:
-            filename = f"{self.name}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
-            
         try:
-            with open(f"data/{filename}", "w") as f:
+            with open(output_path, 'w') as f:
                 json.dump(data, f, indent=2)
-            self.logger.info(f"Data saved to {filename}")
+            self.logger.info(f"Data saved to {output_path}")
+            return output_path
         except Exception as e:
             self.logger.error(f"Error saving data: {str(e)}")
+            raise

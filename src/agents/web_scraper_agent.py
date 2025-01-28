@@ -1,38 +1,23 @@
 from typing import Dict, List, Any, Optional
-from ..agents.base import BaseAgent
+from .base import BaseAgent
 from bs4 import BeautifulSoup
 from playwright.sync_api import sync_playwright
-import requests
 from urllib.parse import urljoin, urlparse
-import re
 from datetime import datetime
 import hashlib
 from time import sleep
 
 class WebScraperAgent(BaseAgent):
-    """Agent for scraping web content from various sources."""
+    """Agent for scraping web content from various sources"""
     
     def __init__(self, config: Optional[Dict[str, Any]] = None):
-        super().__init__(config)
+        super().__init__("WebScraperAgent")
         self.headers = {
             'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
         }
         
-    def collect(self, 
-                urls: List[str],
-                depth: int = 1,
-                max_pages: int = 100) -> Dict[str, List[Dict]]:
-        """
-        Collect data from specified websites.
-        
-        Args:
-            urls: List of URLs to scrape
-            depth: How many levels deep to follow links
-            max_pages: Maximum number of pages to scrape per domain
-            
-        Returns:
-            Dictionary containing collected data from each website
-        """
+    def collect(self, urls: List[str], depth: int = 1, max_pages: int = 100) -> Dict[str, List[Dict]]:
+        """Collect data from specified websites"""
         data = {}
         
         with sync_playwright() as playwright:
@@ -74,9 +59,9 @@ class WebScraperAgent(BaseAgent):
             browser.close()
             
         return data
-        
+    
     def _scrape_page(self, context, url: str) -> Optional[Dict]:
-        """Scrape a single page using Playwright."""
+        """Scrape a single page using Playwright"""
         try:
             page = context.new_page()
             page.goto(url, wait_until="networkidle")
@@ -94,7 +79,6 @@ class WebScraperAgent(BaseAgent):
             )
             
             # Extract main content
-            # Remove script, style, and nav elements
             for element in soup(["script", "style", "nav", "header", "footer"]):
                 element.decompose()
                 
@@ -116,9 +100,9 @@ class WebScraperAgent(BaseAgent):
         except Exception as e:
             self.logger.error(f"Error scraping {url}: {str(e)}")
             return None
-            
+    
     def _extract_links(self, html: str, base_url: str) -> List[str]:
-        """Extract links from HTML content."""
+        """Extract links from HTML content"""
         soup = BeautifulSoup(html, 'html.parser')
         domain = urlparse(base_url).netloc
         links = set()
@@ -132,17 +116,15 @@ class WebScraperAgent(BaseAgent):
                 links.add(full_url)
                 
         return list(links)
-        
+    
     def process(self, data: Dict[str, List[Dict]], *args, **kwargs) -> Dict[str, Any]:
-        """
-        Process collected web data.
-        
-        Args:
-            data: Dictionary containing collected data from each website
-            
-        Returns:
-            Processed data with analytics and insights
-        """
+        """Process collected web data"""
         processed_data = {
             "metadata": {
-                "collection"}}
+                "collection_date": datetime.now().isoformat(),
+                "websites": list(data.keys()),
+                "total_pages": sum(len(pages) for pages in data.values())
+            },
+            "data": data
+        }
+        return processed_data
