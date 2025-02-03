@@ -21,7 +21,7 @@ An advanced system for collecting and analyzing data from various sources using 
 1.  **Clone the repository:**
 
     ```bash
-    git clone [https://github.com/yourusername/ai-research-agents.git](https://github.com/yourusername/ai-research-agents.git)
+    git clone [https://github.com/dev2703/ai-research-agents.git](https://github.com/dev2703/ai-research-agents.git)
     cd ai-research-agents
     ```
 
